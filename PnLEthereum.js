@@ -23,8 +23,8 @@ const bot = new TelegramBot(TOKEN, {
   polling: true
 });
 
-const SWAP_ETH_FOR_TOKENS = '0x7ff36ab5' || '0xb6f9de95';
-const SWAP_TOKENS_FOR_ETH = '0x18cbafe5' || '0x791ac947';  
+const SWAP_ETH_FOR_TOKENS = ['0x7ff36ab5', '0xb6f9de95'];
+const SWAP_TOKENS_FOR_ETH = ['0x18cbafe5', '0x791ac947'];
 
 const WETH_ADDRESS = '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2';
 const UNISWAP_V2_ROUTER_ADDRESS = '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D';
@@ -34,6 +34,17 @@ const routerContract = new web3.eth.Contract(UniswapV2RouterABI, UNISWAP_V2_ROUT
 
 function fontFile (name){
   return path.join(__dirname, '/fonts/', name)
+}
+
+const defaultKeyboardMarkup = {
+  keyboard: [
+      [{
+          text: '⚡ Start',
+      }]
+  ],
+  resize_keyboard: true,
+  one_time_keyboard: false,
+  selective: false
 }
 
 bot.on('message', async (inputText) => {
@@ -53,9 +64,9 @@ bot.on('message', async (inputText) => {
                   updatePnlMessage(chatId);          
           break;
 
-          case /^\/pnl\b/.test(text):
+          case /^(⚡ Start)$/.test(text):
                   updatePnlMessage(chatId);
-              break;
+            break;    
   }
 });
 
@@ -69,6 +80,7 @@ async function displayTransactionDetails(transactionHash) {
           const valTransferred = BigInt(log.data);
           if (log.address === WETH_ADDRESS.toLowerCase()) {
               receivedETH = Number(valTransferred);
+              console.log("Received ETH:", receivedETH);
           }
       }
   });
@@ -97,18 +109,25 @@ async function main(tokenAddress, walletAddress) {
     if (tx) {
       const gasUsed = Number(tx.gasUsed);
       const gasPrice = Number(tx.gasPrice);
-      const methodId = tx.methodId;
+      let methodId = tx.methodId;
+      console.log("Method ID:", methodId);
 
-      if (methodId === SWAP_ETH_FOR_TOKENS) {
+      if (SWAP_ETH_FOR_TOKENS.includes(methodId)) {
         const ethSpent = Number(tx.value);
         const tokensBought = Number(tokenTx.value);
+        console.log("Tokens Bought:", tokensBought);
+        console.log("Hey I'm here!");
 
         totalEthSpent += ethSpent / 10 ** 18;
-        console.log("Total ETH Spent:", totalEthSpent);
         totalTokensBought += tokensBought / 10 ** decimals;
         totalGasUsed += gasUsed * gasPrice;
-      } else if (methodId === SWAP_TOKENS_FOR_ETH) {
+      } else if (SWAP_TOKENS_FOR_ETH.includes(methodId)) {
         const tokensSold = Number(tokenTx.value);
+        console.log("Tokens Sold:", tokensSold);
+
+        console.log("Hey I'm here!");
+
+
         const receivedETH = await displayTransactionDetails(tokenTx.hash);
         const ethReceived = receivedETH;
 
@@ -134,6 +153,7 @@ async function main(tokenAddress, walletAddress) {
 
 
 async function updatePnlMessage(chatId){
+
 
   bot.sendMessage(chatId, '[Token Address] [Wallet Address]`', {
       reply_markup: {
@@ -189,6 +209,8 @@ try{
               let pnl = await calculatePNL(chatId, tokenAddress, walletAddress, walletStats);
 
               let balance = pnl.balance;
+
+              let holdingsInUsd = (pnl.currentTokenValueInETH * ethToUsdRate).toFixed(2);
 
               loadImage('PL-bg.png').then(async (image) => {
                   Canvas.registerFont(fontFile('Audiowide-Regular.ttf'), {family: 'Audiowide-Regular'})
@@ -249,26 +271,26 @@ try{
                           fontFamily: 'Audiowide',
                         };
 
-                        pnlPercentStyle.color = pnl.PnL >= 0 ? 'green' : 'red';
+                        pnlPercentStyle.color = pnl.rPnL >= 0 ? 'green' : 'red';
                       
                         drawText(ctx, 'PnL Analysis', 130, 100, swiftTitle);
                         drawText(ctx, `$${tokenName} Token\n\n`, 150, 175, headerStyle);
                         drawText(ctx, `Total Bought: ${formatNumber(totalTokensBought)}`, 150, 250, contentStyle, 300); // Adjust the maxWidth parameter as needed
-                        drawText(ctx, `Total Sold: ${formatNumber(totalTokensSold)}`, 150, 300, contentStyle, 300);
-                        drawText(ctx, `Total ETH Spent: ${totalEthSpent}`, 150, 375, contentStyle, 400);
-                        drawText(ctx, `Total ETH Received: ${totalEthReceived.toFixed(2)}`, 150, 425, contentStyle, 400);
-                        drawText(ctx, `Gas Used: ${formatNumber(totalGasGwei)} Gwei (${(totalGasUsed / 10 ** 18).toFixed(2)} Ξ)`, 150, 475, contentStyle, 400);
-                        drawText(ctx, `Holdings: ${formatNumber(balance)} (${(pnl.currentTokenValueInETH).toFixed(4)} Ξ) ($${(pnl.currentTokenValueInETH * ethToUsdRate).toFixed(2)})`, 150, 550, contentStyle, 400);
-                        drawText(ctx, `Unrealised PnL:`, 475, 550, contentStyle, 600);
-                        drawText(ctx, `${pnl.PnL.toFixed(2)}%`, 680, 550, { ...contentStyle, color: pnl.PnL >= 0 ? 'green' : 'red' }, 300);
-                        drawText(ctx, `Realised PnL: ${(pnl.realisedPnL).toFixed(2)} Ξ ($${(pnl.realisedPnL * ethToUsdRate).toFixed(2)})`, 150, 625, pnlStyle, 600);
-                        drawText(ctx, `${pnl.rPnL.toFixed(2)}%`, 150, 675, pnlPercentStyle, 300);
-                      
-                      // canvas.createPNGStream().pipe(fs.createWriteStream(path.join(__dirname, 'output/font.png')))
-          
+                        drawText(ctx, `Total Sold: ${formatNumber(totalTokensSold)}`, 150, 290, contentStyle, 300);
+                        drawText(ctx, `Total ETH Spent: ${totalEthSpent.toFixed(2)}`, 150, 350, contentStyle, 380);
+                        drawText(ctx, `Total ETH Received: ${totalEthReceived.toFixed(2)}`, 150, 390, contentStyle, 400);
+                        drawText(ctx, `Gas Used: ${formatNumber(totalGasGwei)} Gwei (${(totalGasUsed / 10 ** 18).toFixed(2)} Ξ)`, 150, 430, contentStyle, 400);
+                        drawText(ctx, `Holdings: ${formatNumber(balance)} (${(pnl.currentTokenValueInETH).toFixed(4)} Ξ) ($${holdingsInUsd})`, 150, 490, contentStyle, 400);
+                        drawText(ctx, `UR PnL: ${pnl.onPaperPnL.toFixed(2)} Ξ ($${(pnl.onPaperPnL * ethToUsdRate).toFixed(2)})`, 150, 530, contentStyle, 800);
+                        drawText(ctx, `${pnl.urPnL.toFixed(2)}%`, 480, 530, { ...contentStyle, color: pnl.urPnL >= 0 ? 'green' : 'red' }, 300);
+                        drawText(ctx, `Realised PnL: ${(pnl.realisedPnL).toFixed(2)} Ξ ($${(pnl.realisedPnL * ethToUsdRate).toFixed(2)})`, 150, 600, pnlStyle, 600);
+                        drawText(ctx, `${pnl.rPnL.toFixed(2)}%`, 150, 650, pnlPercentStyle, 300);
+                                
                       const buffer = canvas.toBuffer('image/png');
           
-                      bot.sendPhoto(chatId, buffer).then((message) => {
+                      bot.sendPhoto(chatId, buffer, {
+                        reply_markup: defaultKeyboardMarkup,
+                    }).then((message) => {
                           setTimeout(() => {
                               bot.deleteMessage(chatId, message.message_id);
                           }, 15000000);
@@ -298,26 +320,31 @@ try{
 
 async function calculatePNL(chatId, tokenAddress, walletAddress, walletStats) {
 
-  const balanceRes = await axios.get(`https://api.etherscan.io/api?module=account&action=tokenbalance&contractaddress=${tokenAddress}&address=${walletAddress}&tag=latest&apikey=${ETHERSCAN_API}`);
-
-  const balance = balanceRes.data.result;
-  console.log("Balance:", balance);
-
-  
   let decimals = walletStats.decimals;
   let totalEthReceived = walletStats.totalEthReceived;
   let totalEthSpent = walletStats.totalEthSpent;
   let totalGasUsed = walletStats.totalGasUsed / 10 ** 18;
-  
+  let totalTokensBought = walletStats.totalTokensBought;
+  let totalTokensSold = walletStats.totalTokensSold;
 
+
+  const balanceRes = await axios.get(`https://api.etherscan.io/api?module=account&action=tokenbalance&contractaddress=${tokenAddress}&address=${walletAddress}&tag=latest&apikey=${ETHERSCAN_API}`);
+
+  const balance = balanceRes.data.result / 10 ** decimals;
+  
   let currentTokenValueInETH;
+  let avgHoldingValue;
+
 
   if (balance > 0) {
-    const balanceInWei = balance * 10 ** decimals;
-  
+    const balanceInWei = balanceRes.data.result;
+  console.log("Balance in Wei:", balanceInWei);
     try {
       const amounts = await routerContract.methods.getAmountsOut(balanceInWei.toString(), [tokenAddress, WETH_ADDRESS]).call();
       let expectedETH = web3.utils.fromWei(amounts[1], 'ether');
+
+      avgHoldingValue = balance / expectedETH;
+      console.log("Average Holding Value:", avgHoldingValue);
   
       currentTokenValueInETH = parseFloat(expectedETH);
     } catch (error) {
@@ -328,22 +355,37 @@ async function calculatePNL(chatId, tokenAddress, walletAddress, walletStats) {
     currentTokenValueInETH = 0;
   }
 
-const onPaper = parseFloat(currentTokenValueInETH) + parseFloat(totalEthReceived);
+
 
 let onPaperPnL = 0;
 let realisedPnL = 0;
 let rPnL = 0;
-let PnL = 0;
-  if (totalEthSpent !== 0) {
-    const totalCost = totalEthSpent + totalGasUsed;
-      onPaperPnL = (onPaper - totalCost);
-      PnL = ((onPaper - totalCost) / totalCost) * 100;
+let urPnL = 0;
 
-      realisedPnL = totalEthReceived - totalCost;
-      rPnL = (realisedPnL / totalCost) * 100;
+let avgBuyPrice = totalTokensBought / (totalEthSpent + totalGasUsed);
+
+let avgSellPrice = totalTokensSold / totalEthReceived;
+
+let avgBuyRate = 1 / avgBuyPrice;
+let avgSellRate = 1 / avgSellPrice;
+
+if (totalEthSpent !== 0) {
+  let avgHoldingRate = 1 / avgHoldingValue;
+
+  let urPnLValue = (avgHoldingRate - avgBuyRate) * balance;
+  urPnL = (urPnLValue / (totalEthSpent + totalGasUsed)) * 100;
+
+  if (totalTokensBought < totalTokensSold) {
+    realisedPnL = totalEthReceived - (totalEthSpent + totalGasUsed);
+    rPnL = (realisedPnL / (totalEthSpent + totalGasUsed)) * 100;
+  } else {
+    let avgDifference = avgSellRate - avgBuyRate;
+    realisedPnL = (avgDifference * totalTokensSold);
+    rPnL = (realisedPnL / (totalEthSpent + totalGasUsed)) * 100;
   }
-
-  return {balance, currentTokenValueInETH, onPaperPnL, PnL, realisedPnL, rPnL };
+  
+}
+  return {balance, currentTokenValueInETH, onPaperPnL, urPnL, realisedPnL, rPnL };
 }
 
 
@@ -361,7 +403,3 @@ function formatNumber(value) {
       return roundedValue.endsWith('.0') ? roundedValue.slice(0, -2) : roundedValue;
   }
 }
-
-
-
-
